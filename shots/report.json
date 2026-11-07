@@ -1,0 +1,21 @@
+{
+  "problems": [],
+  "shots": [
+    "01-welcome.png",
+    "01b-welcome-full.png",
+    "02-identity.png",
+    "03-skills.png",
+    "03b-skill-card.png",
+    "04-capabilities.png",
+    "12-plugin.png",
+    "05-starters.png",
+    "06-package.png",
+    "07-english.png",
+    "08-light.png",
+    "08b-light-welcome.png",
+    "09-mobile-welcome.png",
+    "09-mobile.png",
+    "10-quickstart.png",
+    "11-quickstart-export.png"
+  ]
+}

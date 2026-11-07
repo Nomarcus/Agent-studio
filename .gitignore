@@ -1,0 +1,6 @@
+node_modules/
+.DS_Store
+*.log
+.test-output/
+app.js.bak
+agent-studio.zip

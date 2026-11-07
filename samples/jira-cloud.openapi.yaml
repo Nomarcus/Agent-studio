@@ -1,0 +1,308 @@
+openapi: 3.0.3
+info:
+  title: Jira Cloud REST (support subset)
+  version: 3.0.0
+  description: >
+    A focused subset of the Jira Cloud REST API for a Customer Service Agent.
+    Covers searching issues with JQL, fetching one issue, and adding a comment.
+    Replace the server variable with your Jira Cloud site before sideloading.
+    Authentication uses a Jira API token (email + token as HTTP Basic) configured
+    in Teams Developer Portal as an API key vault reference — never put secrets
+    in this file.
+  contact:
+    name: Agent Studio
+servers:
+  - url: https://{yourDomain}.atlassian.net
+    variables:
+      yourDomain:
+        default: your-domain
+        description: Your Jira Cloud subdomain (the part before .atlassian.net)
+tags:
+  - name: Issues
+    description: Search and read Jira issues
+  - name: Comments
+    description: Add comments to issues
+paths:
+  /rest/api/3/search:
+    get:
+      operationId: searchIssues
+      tags: [Issues]
+      summary: Search issues with JQL
+      description: >
+        Search Jira issues using Jira Query Language (JQL). Use this when the user
+        wants a list of matching tickets rather than one known key. Typical JQL
+        examples: project = INT AND status != Done, key = INT-1842,
+        text ~ "duplicate invoice". Return keys, summaries and status so the
+        agent can pick the right ticket.
+      parameters:
+        - name: jql
+          in: query
+          required: true
+          description: A JQL query, for example project = INT AND text ~ "order".
+          schema:
+            type: string
+        - name: maxResults
+          in: query
+          required: false
+          description: Maximum number of issues to return (Jira default 50, cap at 50 here).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: startAt
+          in: query
+          required: false
+          description: Index of the first issue to return (0-based).
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: fields
+          in: query
+          required: false
+          description: Comma-separated field list. Use summary,status,issuetype,priority,assignee,updated,created,reporter unless the user asks for more.
+          schema:
+            type: string
+            default: summary,status,issuetype,priority,assignee,updated,created,reporter
+      responses:
+        "200":
+          description: Matching issues
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResults"
+        "400":
+          description: Invalid JQL
+        "401":
+          description: Authentication failed
+        "403":
+          description: Permission denied
+  /rest/api/3/issue/{issueIdOrKey}:
+    get:
+      operationId: getIssue
+      tags: [Issues]
+      summary: Get a single issue
+      description: >
+        Fetch one Jira issue by key (INT-1842) or numeric id. Use this when the
+        user pastes a ticket key or after searchIssues identifies the right issue.
+        Ask for fields needed to analyse the ticket; include comment data when
+        the user wants a timeline.
+      parameters:
+        - name: issueIdOrKey
+          in: path
+          required: true
+          description: Issue key (INT-1842) or numeric id.
+          schema:
+            type: string
+        - name: fields
+          in: query
+          required: false
+          description: Comma-separated fields to return. Use *navigable or a specific list.
+          schema:
+            type: string
+            default: summary,status,issuetype,priority,assignee,reporter,created,updated,description,comment,labels
+        - name: expand
+          in: query
+          required: false
+          description: Optional expand list, for example changelog.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Issue"
+        "401":
+          description: Authentication failed
+        "404":
+          description: Issue not found or not visible
+  /rest/api/3/issue/{issueIdOrKey}/comment:
+    post:
+      operationId: addComment
+      tags: [Comments]
+      summary: Add a comment to an issue
+      description: >
+        Add a comment to a Jira issue. The body MUST be Atlassian Document Format
+        (ADF), not plain text. For a simple comment use a doc with one paragraph
+        and one text node. Never invent ticket facts. Confirm with the user
+        before posting, and do not mention internal usernames or unconfirmed
+        root causes in customer-visible text.
+      parameters:
+        - name: issueIdOrKey
+          in: path
+          required: true
+          description: Issue key (INT-1842) or numeric id.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCommentRequest"
+            example:
+              body:
+                type: doc
+                version: 1
+                content:
+                  - type: paragraph
+                    content:
+                      - type: text
+                        text: We are investigating the integration error and will update you when we know more.
+      responses:
+        "201":
+          description: Comment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Comment"
+        "400":
+          description: Invalid comment body
+        "401":
+          description: Authentication failed
+        "404":
+          description: Issue not found
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: >
+        Jira Cloud API token via HTTP Basic (email as username, API token as password).
+        Configure the token in Microsoft 365 / Teams Developer Portal as an API key
+        vault reference and set that reference id on the plugin runtime. Do not put
+        the token in this specification.
+  schemas:
+    SearchResults:
+      type: object
+      properties:
+        startAt:
+          type: integer
+        maxResults:
+          type: integer
+        total:
+          type: integer
+        issues:
+          type: array
+          items:
+            $ref: "#/components/schemas/Issue"
+    Issue:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        self:
+          type: string
+          format: uri
+        fields:
+          $ref: "#/components/schemas/IssueFields"
+    IssueFields:
+      type: object
+      properties:
+        summary:
+          type: string
+        description:
+          description: May be plain text or Atlassian Document Format.
+        created:
+          type: string
+        updated:
+          type: string
+        labels:
+          type: array
+          items:
+            type: string
+        status:
+          type: object
+          properties:
+            name:
+              type: string
+        issuetype:
+          type: object
+          properties:
+            name:
+              type: string
+        priority:
+          type: object
+          properties:
+            name:
+              type: string
+        assignee:
+          $ref: "#/components/schemas/UserRef"
+        reporter:
+          $ref: "#/components/schemas/UserRef"
+        comment:
+          type: object
+          properties:
+            comments:
+              type: array
+              items:
+                $ref: "#/components/schemas/Comment"
+    UserRef:
+      type: object
+      properties:
+        displayName:
+          type: string
+        accountId:
+          type: string
+        emailAddress:
+          type: string
+    AddCommentRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          $ref: "#/components/schemas/AdfDoc"
+    AdfDoc:
+      type: object
+      required: [type, version, content]
+      properties:
+        type:
+          type: string
+          enum: [doc]
+        version:
+          type: integer
+          enum: [1]
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdfParagraph"
+    AdfParagraph:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [paragraph]
+        content:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [text]
+              text:
+                type: string
+    Comment:
+      type: object
+      properties:
+        id:
+          type: string
+        self:
+          type: string
+          format: uri
+        created:
+          type: string
+        updated:
+          type: string
+        author:
+          $ref: "#/components/schemas/UserRef"
+        body:
+          description: Atlassian Document Format document or rendered text depending on expand options.
+security:
+  - basicAuth: []
